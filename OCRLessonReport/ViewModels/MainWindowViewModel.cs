@@ -41,11 +41,7 @@ namespace OCRLessonReport.ViewModels
 
             //Configure tesseract engine for local path
             System.Environment.SetEnvironmentVariable("TESSDATA_PREFIX", settingsManager.Settings.TessdataPrefix);
-
-            //var imageprocessor = new ImageProcessor(Resources.DSC02127, settingsManager);
-            //imageprocessor.ProccessImage(null);
-            //SourceImage = imageprocessor.SourceBitmapImage;
-            //cells = imageprocessor.Cells.ToList();
+           
             InitCommands();
             InitWorker();
         }
