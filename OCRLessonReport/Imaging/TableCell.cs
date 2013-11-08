@@ -19,30 +19,36 @@ namespace OCRLessonReport.Imaging
 
         public Bitmap Image { get; private set; }
 
-        public bool Mask { get; private set; }
+        public bool Mark { get; private set; }
        
         public string Text { get; private set; } 
 
         public BitmapImage BitmapImage { get { return Image.ToBitmapImage(); } }
 
-        public TableCell(int column, int row, TableCellType type, Bitmap image, string text, bool mask)
+        public TableCell(int column, int row, TableCellType type, Bitmap image, string text, bool mark)
         {
             this.Column = column;
             this.Row = row;
             this.Type = type;
             this.Image = image;
             this.Text = text;
-            this.Mask = mask;
-        }       
+            this.Mark = mark;
+        }
+
+        public override string ToString()
+        {
+            return String.Format("C={0}, R={1}, Value={2}", Column, Row, (Type == TableCellType.Mark) ? Mark.ToString() : Text);
+        }
       
     }
 
+    [Flags]
     public enum TableCellType
     {
-        Text = 0,
-        Mark = 1,
-        Header = 2,
-        HeaderRotated = 3,
-        MainHeader = 4
+        Unknown = 0,
+        Text = 1,
+        Mark = 2,
+        Header = 4,     
+        MainHeader = 8,        
     }
 }

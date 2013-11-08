@@ -18,6 +18,7 @@ using OCRLessonReport.Helpers;
 using OCRLessonReport.Imaging;
 using OCRLessonReport.Properties;
 using Tesseract;
+using System.Text.RegularExpressions;
 
 namespace OCRLessonReport.Imaging
 {
@@ -25,7 +26,7 @@ namespace OCRLessonReport.Imaging
     {
         BitmapImage SourceBitmapImage { get; }
         List<TableCell> Cells { get; }
-        void ProccessImage(BackgroundWorker worker);      
+        void ProccessImage(BackgroundWorker worker);
     }
 
     public class ImageProcessor : IImageProcessor
@@ -132,7 +133,7 @@ namespace OCRLessonReport.Imaging
             var groupedheaderLineCoordinates = ImagingHelper.GroupingCoordinates(headerLineCoordinates, Settings.LineGroupingDelta);
             //Build cell map
             List<TableCell> cellMap = new List<TableCell>();
-              
+
             UpdateProgress(50);
 
             //Use tess engine for ocr
@@ -155,48 +156,59 @@ namespace OCRLessonReport.Imaging
                     cellMap.Add(new TableCell(0, 0, TableCellType.MainHeader, hImage, page.GetText(), false));
                 }
 
+                Dictionary<int, TableCellType> columnTypesMap = ParseColumns(tmpImage, groupedheaderLineCoordinates, groupedCoordinates, cellMap, engine);
+
                 //Parse table
                 for (int i = 0; i < groupedheaderLineCoordinates.Count - 1; i++)
                 {
-                    int subjectArea = (i < Settings.ColumnSubjectStart - 1) ? 0 : 1;
+                    if (columnTypesMap[i] == TableCellType.Unknown)
+                        continue;
 
-                    for (int j = Settings.HeaderStartLine; j < groupedCoordinates.Count - Settings.BottomStartLine - 1; j++)
+                    for (int j = Settings.HeaderStartLine + 1; j < groupedCoordinates.Count - Settings.BottomStartLine - 1; j++)
                     {
-                        int headerArea = (j == Settings.HeaderStartLine) ? 2 : 0;
-
-                        TableCellType cellType = (TableCellType)(subjectArea + headerArea);
-
                         var cellImg = tmpImage.Copy(new Rectangle(groupedheaderLineCoordinates[i], groupedCoordinates[j],
                                              groupedheaderLineCoordinates[i + 1] - groupedheaderLineCoordinates[i],
                                              groupedCoordinates[j + 1] - groupedCoordinates[j]));
 
-                        if (cellType == TableCellType.Text || cellType == TableCellType.Header || cellType == TableCellType.HeaderRotated)
+                        cellImg = ProcessCell(cellImg, i == Settings.NameStartLine);
+
+
+
+                        if (columnTypesMap[i] == TableCellType.Text)
                         {
-                            cellImg = ProcessCell(cellImg, i == Settings.NameStartLine);
-
-                            string text = String.Empty;
-
-                            if (cellType == TableCellType.HeaderRotated)
-                                cellImg.RotateFlip(RotateFlipType.Rotate90FlipNone);
+                            string cellText = String.Empty;
 
                             using (var page = engine.Process(cellImg, PageSegMode.SingleBlock))
                             {
-                                text = page.GetText();
+                                cellText = page.GetText();
                             }
 
+                            int val;
 
-                            cellMap.Add(new TableCell(i, j, cellType, cellImg, text, false));
+                            if ((i < Settings.ColumnSubjectStart - 1) && !Int32.TryParse(Regex.Replace(cellText, @"[\s]", ""), out val))
+                            {
+                                Median median = new Median();
+                                median.ApplyInPlace(cellImg);
+
+                                using (var page = engine.Process(cellImg, PageSegMode.SingleBlock))
+                                {
+                                    cellText = page.GetText();
+                                }
+                            }
+
+                            cellMap.Add(new TableCell(i, j, columnTypesMap[i], cellImg, cellText, false));
                         }
-                        else
+                        else if (columnTypesMap[i] == TableCellType.Mark)
                         {
-                            cellImg = ProcessCell(cellImg);
+                            Median median = new Median();
+                            median.ApplyInPlace(cellImg);
 
                             BilateralSmoothing bfilter = new BilateralSmoothing();
                             bfilter.KernelSize = 7;
                             bfilter.SpatialFactor = 10;
                             bfilter.ColorFactor = 60;
                             bfilter.ColorPower = 0.5;
-                            bfilter.ApplyInPlace(cellImg);
+                            bfilter.ApplyInPlace(cellImg);                        
 
                             cellImg = FilterColors(cellImg, Settings.FilteringColor, ByteColor.Black, ByteColor.White);
 
@@ -211,11 +223,13 @@ namespace OCRLessonReport.Imaging
                             var biggestBlob = blobs.OrderBy(b => b.Area).LastOrDefault();
                             var biggestBlobsImage = biggestBlob.Image.ToManagedImage();
 
-                            cellMap.Add(new TableCell(i, j, cellType, biggestBlobsImage, GetMask(biggestBlobsImage).ToString(), GetMask(biggestBlobsImage)));
+
+                            cellMap.Add(new TableCell(i, j, columnTypesMap[i], biggestBlobsImage, String.Empty, DetectColor(biggestBlobsImage, Settings.CellMaskSensitivity)));
                         }
 
                         curProgress++;
                         double reportProgress = (double)curProgress / (double)fullProgress * 50 + 50;
+
                         UpdateProgress((int)reportProgress);
                     }
                 }
@@ -254,6 +268,91 @@ namespace OCRLessonReport.Imaging
 
         #region Infrastructure
 
+        protected virtual Dictionary<int, TableCellType> ParseColumns(Bitmap image, List<int> xCoord, List<int> yCoord, List<TableCell> cellMap, TesseractEngine engine)
+        {
+            Dictionary<int, TableCellType> columnTypesMap = new Dictionary<int, TableCellType>();
+
+            for (int i = 0; i < xCoord.Count - 1; i++)
+            {
+                bool isSubjectArea = (i > Settings.ColumnSubjectStart - 1);
+
+                var cellImg = image.Copy(new Rectangle(xCoord[i], yCoord[Settings.HeaderStartLine],
+                                               xCoord[i + 1] - xCoord[i],
+                                               yCoord[Settings.HeaderStartLine + 1] - yCoord[Settings.HeaderStartLine]));
+
+                string cellText = String.Empty;
+             
+                cellImg = ProcessCell(cellImg);
+
+                if (isSubjectArea)
+                    cellImg.RotateFlip(RotateFlipType.Rotate90FlipNone);
+
+                BlobCounter bcounter = new BlobCounter();
+                bcounter.FilterBlobs = true;
+                bcounter.MinHeight = 5;
+                bcounter.MinWidth = 5;
+                bcounter.ProcessImage(cellImg);
+
+                //Check if header cell has something
+                if (bcounter.ObjectsCount < 1)
+                {
+                    columnTypesMap.Add(i, TableCellType.Unknown);
+                    continue;
+                }
+                //Try parse header text
+                using (var page = engine.Process(cellImg, PageSegMode.SingleBlock))
+                {
+                    cellText = page.GetText();
+                }
+                //If can't parse - unknown type
+                if (String.IsNullOrWhiteSpace(cellText.Trim()))
+                {
+                    columnTypesMap.Add(i, TableCellType.Unknown);
+                    continue;
+                }
+                //Check if possible subject area
+                if (!isSubjectArea)
+                {
+                    columnTypesMap.Add(i, TableCellType.Text);
+                }
+                else
+                {
+                    var tmpCellImg = image.Copy(new Rectangle(xCoord[i], yCoord[Settings.HeaderStartLine + 1],
+                                                        xCoord[i + 1] - xCoord[i],
+                                                        yCoord[Settings.HeaderStartLine + 2] - yCoord[Settings.HeaderStartLine + 1]));
+
+                    tmpCellImg = ProcessCell(tmpCellImg);
+
+                    bcounter.ProcessImage(tmpCellImg);
+
+                    if (bcounter.ObjectsCount < 1)
+                    {
+                        columnTypesMap.Add(i, TableCellType.Unknown);
+                        continue;
+                    }
+
+                    string tmpCellText;
+
+                    using (var page = engine.Process(tmpCellImg, PageSegMode.SingleBlock))
+                    {
+                        tmpCellText = page.GetText();
+                    }
+
+                    int num;
+
+                    if (Int32.TryParse(tmpCellText.Trim(), out num))
+                        columnTypesMap.Add(i, TableCellType.Text);
+                    else
+                        columnTypesMap.Add(i, TableCellType.Mark);
+                }
+
+                cellMap.Add(new TableCell(i, Settings.HeaderStartLine, columnTypesMap[i] | TableCellType.Header, cellImg, cellText, false));
+            }
+
+            return columnTypesMap;
+        }
+
+
         protected virtual Bitmap ProcessCell(Bitmap cellImg, bool check = false)
         {
             //Build horizontal hough lines
@@ -287,7 +386,7 @@ namespace OCRLessonReport.Imaging
 
             var xEdges = GetCellEdges(vLineCoordinates, cellImg.Width, Settings.CellXEdgeWith, Settings.CellEdgeCutting);
             var yEdges = GetCellEdges(hLineCoordinates, cellImg.Height, Settings.CellYEdgeWith, Settings.CellEdgeCutting);
-           
+
             cellImg = cellImg.Copy(new Rectangle(xEdges.Item1, yEdges.Item1, xEdges.Item2 - xEdges.Item1, yEdges.Item2 - yEdges.Item1));
 
             //Check central line
@@ -348,7 +447,7 @@ namespace OCRLessonReport.Imaging
         }
 
         protected virtual Tuple<int, int> GetCellEdges(IEnumerable<int> coordinates, int size, double coeff, int cutting)
-        {         
+        {
             var x0 = coordinates.Where(x => x < size * coeff).OrderBy(x => x).LastOrDefault();
             var x1 = coordinates.Where(x => x > size * (1 - coeff)).OrderBy(x => x).FirstOrDefault();
 
@@ -566,7 +665,7 @@ namespace OCRLessonReport.Imaging
             return image;
         }
 
-        protected virtual bool GetMask(Bitmap image)
+        protected virtual bool DetectColor(Bitmap image, int color)
         {
             var width = image.Width;
             var height = image.Height;
@@ -599,7 +698,7 @@ namespace OCRLessonReport.Imaging
             if (sum.HasValue)
                 avg = (int)(sum.Value / imageBits.Length);
 
-            return avg > 130;
+            return avg > color;
         }
 
         protected virtual double DetectRotation(Bitmap image)

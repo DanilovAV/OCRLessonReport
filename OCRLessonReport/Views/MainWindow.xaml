@@ -99,7 +99,7 @@
                                 <StackPanel Orientation="Horizontal" Margin="3">
                                     <Image Source="{Binding BitmapImage}" Width="{Binding Image.Width}" Height="{Binding Image.Height}" />
                                     <TextBlock Text="=" VerticalAlignment="Center" />
-                                    <TextBlock Text="{Binding Text}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding}" VerticalAlignment="Center" />
                                 </StackPanel>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

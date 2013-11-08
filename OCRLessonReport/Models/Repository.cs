@@ -12,15 +12,7 @@ using System.Text.RegularExpressions;
 namespace OCRLessonReport.Models
 {
     public class Repository
-    {
-        private static Dictionary<TableCellType, DataTypeEnum> TypeMap = new Dictionary<TableCellType, DataTypeEnum>()
-        { 
-            { TableCellType.HeaderRotated, DataTypeEnum.adBoolean },
-            { TableCellType.Mark, DataTypeEnum.adBoolean },
-            { TableCellType.Header, DataTypeEnum.adWChar },
-            { TableCellType.Text, DataTypeEnum.adWChar }
-        };
-
+    {        
         private string connectionString;
 
         private static string ResultTable = "Result";
@@ -40,14 +32,14 @@ namespace OCRLessonReport.Models
 
             var catalog = new Catalog();
             catalog.Create(connectionString);
-                      
+
             Marshal.FinalReleaseComObject(catalog.ActiveConnection);
             Marshal.FinalReleaseComObject(catalog);
 
             var headerInfo = GetHeaderInfo(cells);
 
-            CreateResultTable();
-            InsertIntoResultTable(cells, headerInfo.Item1, headerInfo.Item2);   
+            CreateResultTable(cells);
+            InsertIntoResultTable(cells, headerInfo.Item1, headerInfo.Item2);
         }
 
         /// <summary>
@@ -61,7 +53,7 @@ namespace OCRLessonReport.Models
 
             if (topHeader == null)
                 throw new Exception("Impossible to recognize top header data.");
-            
+
             //Example text for tests
             //var text = "INĞİRLI Tısîmîdîêéîoüârâl MESLEK LİSESİ ”\nÖĞRENCİ GÜNLÜK YOKLAMA FİŞİ\nC 11 /A)slNIFI LİSTESİ ( 3o,1o.2o13)çARsAMaA\n\n";
 
@@ -78,7 +70,7 @@ namespace OCRLessonReport.Models
                 //use regex, because text can be not clear
                 var match = Regex.Match(str, @"(\d{1,2}).(.)");
 
-                if (match.Success && match.Groups.Count > 2)                
+                if (match.Success && match.Groups.Count > 2)
                     className = match.Groups[1].Value + " / " + match.Groups[2].Value;
 
                 match = Regex.Match(str, @"(\d{2}\.\d{2}.\d{4})");
@@ -89,13 +81,13 @@ namespace OCRLessonReport.Models
 
             Tuple<string, string> result = new Tuple<string, string>(className, date);
 
-            return result;      
+            return result;
         }
 
         /// <summary>
         /// Create result table
         /// </summary>
-        private void CreateResultTable()
+        private void CreateResultTable(List<TableCell> cells)
         {
             using (OleDbConnection conn = new OleDbConnection(connectionString))
             {
@@ -103,16 +95,22 @@ namespace OCRLessonReport.Models
 
                 OleDbCommand cmd = conn.CreateCommand();
 
+                var lessonsColumnsStr = String.Join(",", GetLessonsColumns(cells).Select(l => l.Item3));
+
+                if (lessonsColumnsStr.Length > 0)
+                    lessonsColumnsStr = "," + lessonsColumnsStr;
+
                 cmd.CommandText = "CREATE TABLE " + ResultTable + "("
-                + "ID int PRIMARY KEY,"
-                + "Name varchar(255),"
-                + "Lesson bit,"
-                + "Class varchar(10),"
-                + "Data varchar(10)"
+                + "id varchar(6) null,"
+                + "Class_Name varchar(10) null,"
+                + "Class_Date varchar(10) null,"
+                + "Student_Number varchar(6) null,"
+                + "Student_Name varchar(255) null"              
+                + lessonsColumnsStr
                 + ")";
 
                 cmd.ExecuteNonQuery();
-           }                       
+            }
         }
 
         private void InsertIntoResultTable(List<TableCell> cells, string className, string date)
@@ -121,30 +119,52 @@ namespace OCRLessonReport.Models
 
             if (rows.Length < settingsManager.Settings.HeaderStartLine + 1)
                 return;
-         
+
             using (OleDbConnection conn = new OleDbConnection(connectionString))
             {
                 conn.Open();
 
+                var lessonsColumns = GetLessonsColumns(cells);
+
+                var lessonsColumnsStr = String.Join(",", GetLessonsColumns(cells).Select(l => l.Item2));
+                if (lessonsColumnsStr.Length > 0)
+                    lessonsColumnsStr = "," + lessonsColumnsStr;
+
+                var lessonsColumnsGrouped = lessonsColumns.ToDictionary(c => c.Item1);
+
                 OleDbCommand cmd = conn.CreateCommand();
-                cmd.CommandText = "INSERT INTO " + ResultTable + " VALUES (@id, @name, @lesson, @class, @data)";
+                cmd.CommandText = "INSERT INTO " + ResultTable + " VALUES (@id, @class, @date, @student_number, @name " + lessonsColumnsStr + ")";
 
                 for (int row = settingsManager.Settings.HeaderStartLine + 1; row < rows.Length; row++)
-                {                    
-                    int id;
+                {
+                    string id = Regex.Replace(rows[row].Cells[0].Text, @"[\s]", "");
+                    string student_number = Regex.Replace(rows[row].Cells[1].Text, @"[\s]", "");
 
-                    if (!Int32.TryParse(rows[row].Cells[1].Text.Trim(), out id))
+                    if (String.IsNullOrEmpty(id) || String.IsNullOrEmpty(student_number))
                         continue;
 
                     cmd.Parameters.AddWithValue("@id", id);
-                    cmd.Parameters.AddWithValue("@name", rows[row].Cells[2].Text.Trim());
-                    cmd.Parameters.AddWithValue("@lesson", rows[row].Cells[3].Mask);
                     cmd.Parameters.AddWithValue("@class", className);
-                    cmd.Parameters.AddWithValue("@data", date);
+                    cmd.Parameters.AddWithValue("@date", date);
+                    cmd.Parameters.AddWithValue("@student_number", student_number);
+                    cmd.Parameters.AddWithValue("@name", rows[row].Cells[2].Text.Trim());
+
+                    foreach (var cell in rows[row].Cells.Where(c => c.Type == TableCellType.Mark))
+                        cmd.Parameters.AddWithValue(lessonsColumnsGrouped[cell.Column].Item2, rows[row].Cells[3].Mark.ToString());
+                 
                     cmd.ExecuteNonQuery();
                     cmd.Parameters.Clear();
                 }
-            }              
+            }
+        }
+
+        private List<Tuple<int, string, string>> GetLessonsColumns(List<TableCell> cells)
+        {
+            var lessons = cells.Where(c => (c.Type == (TableCellType.Header | TableCellType.Mark)) && !String.IsNullOrWhiteSpace(c.Text)).OrderBy(c => c.Column).
+                            Select((cell, index) => Tuple.Create(cell.Column, String.Format("@lesson_{0}", index + 1), String.Format("Lesson_{0} varchar(5)", index + 1))).
+                            ToList();
+
+            return lessons;
         }
     }
 }

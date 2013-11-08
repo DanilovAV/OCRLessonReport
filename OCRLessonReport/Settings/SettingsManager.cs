@@ -131,7 +131,7 @@ namespace OCRLessonReport
         {
             Settings settings = new Settings();
 
-            settings.VerticalSensitivity = 0.85;
+            settings.VerticalSensitivity = 0.93;
             settings.HorizontalSensitivity = 0.5;
             settings.CellSensitivity = 0.85;
 
@@ -156,12 +156,13 @@ namespace OCRLessonReport
             settings.BottomStartLine = 2;
             settings.NameStartLine = 2;
 
-            settings.ColumnSubjectStart = 4;
+            settings.ColumnSubjectStart = 3;
 
             settings.CellXEdgeWith = 0.25;
             settings.CellYEdgeWith = 0.1;
-
             settings.CellEdgeCutting = 3;
+            settings.CellMaskSensitivity = 140;
+
             //Sheet edge detection sensitivity
             settings.SheetEdgeSensitivity = 0.75;
             settings.SheetEdgeVerticalMaxAngle = 5;

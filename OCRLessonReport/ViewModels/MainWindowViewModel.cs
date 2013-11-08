@@ -436,7 +436,7 @@ namespace OCRLessonReport.ViewModels
 
         private bool CanSave()
         {
-            return Cells != null && Cells.Count > 0;
+            return !IsBusy && Cells != null && Cells.Count > 0;
         }
 
         private void ShowError(string message = "")
