@@ -350,7 +350,7 @@ namespace OCRLessonReport.ViewModels
         private void CloseWebCam()
         {
             if (videoSource != null)
-                videoSource.SignalToStop();
+                videoSource.SignalToStop();            
 
             IsWebCamOpened = false;
             RaiseCommandsExecute();
