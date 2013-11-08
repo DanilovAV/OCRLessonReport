@@ -7,7 +7,7 @@ using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using OCRStudentsPresence.Imaging;
+using OCRLessonReport.Imaging;
 
 namespace OCRLessonReport.Helpers
 {

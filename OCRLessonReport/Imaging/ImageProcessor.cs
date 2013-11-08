@@ -78,7 +78,7 @@ namespace OCRLessonReport.Imaging
             }
 
             //Build horizontal hough lines
-            OCRStudentsPresence.Imaging.HoughLineTransformation lineTransform = new OCRStudentsPresence.Imaging.HoughLineTransformation();
+            OCRLessonReport.Imaging.HoughLineTransformation lineTransform = new OCRLessonReport.Imaging.HoughLineTransformation();
 
             HoughLineRequestSettings settings = new HoughLineRequestSettings
             {
@@ -257,7 +257,7 @@ namespace OCRLessonReport.Imaging
         protected virtual Bitmap ProcessCell(Bitmap cellImg, bool check = false)
         {
             //Build horizontal hough lines
-            OCRStudentsPresence.Imaging.HoughLineTransformation lineTransform = new OCRStudentsPresence.Imaging.HoughLineTransformation();
+            OCRLessonReport.Imaging.HoughLineTransformation lineTransform = new OCRLessonReport.Imaging.HoughLineTransformation();
 
             HoughLineRequestSettings vSettings = new HoughLineRequestSettings
             {
@@ -312,7 +312,7 @@ namespace OCRLessonReport.Imaging
 
             tmpImage.UnlockBits(tmpImageData);
 
-            OCRStudentsPresence.Imaging.HoughLineTransformation lineTransform = new OCRStudentsPresence.Imaging.HoughLineTransformation();
+            OCRLessonReport.Imaging.HoughLineTransformation lineTransform = new OCRLessonReport.Imaging.HoughLineTransformation();
 
             HoughLineRequestSettings vSettings = new HoughLineRequestSettings
             {
@@ -605,7 +605,7 @@ namespace OCRLessonReport.Imaging
         protected virtual double DetectRotation(Bitmap image)
         {
             //Hough line transformation
-            OCRStudentsPresence.Imaging.HoughLineTransformation lineTransform = new OCRStudentsPresence.Imaging.HoughLineTransformation();
+            OCRLessonReport.Imaging.HoughLineTransformation lineTransform = new OCRLessonReport.Imaging.HoughLineTransformation();
 
             HoughLineRequestSettings settings = new HoughLineRequestSettings
             {
