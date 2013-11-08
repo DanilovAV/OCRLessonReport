@@ -188,12 +188,6 @@
   <ItemGroup>
     <None Include="Resources\InternalImage.jpg" />
     <Resource Include="Resources\Icon.ico" />
-    <None Include="Resources\DSC02124.JPG" />
-    <None Include="Resources\DSC02129.JPG" />
-    <None Include="Resources\DSC02128.JPG" />
-    <None Include="Resources\DSC02127.JPG" />
-    <None Include="Resources\DSC02126.JPG" />
-    <None Include="Resources\DSC02125.JPG" />
     <Content Include="x86\liblept168.dll">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </Content>
