@@ -30,7 +30,7 @@
     <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
-    <PlatformTarget>x86</PlatformTarget>
+    <PlatformTarget>AnyCPU</PlatformTarget>
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
@@ -215,9 +215,11 @@
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
-    <PostBuildEvent>xcopy "$(TargetDir)*.dll" "$(SolutionDir)Shell\bin\$(ConfigurationName)\lib\" /Y
+    <PostBuildEvent>xcopy "$(TargetDir)*.dll" "$(SolutionDir)OCRLessonReport\bin\$(ConfigurationName)\lib\" /Y
+xcopy "$(TargetDir)*.xml" "$(SolutionDir)OCRLessonReport\bin\$(ConfigurationName)\lib\" /Y
 del "$(TargetDir)*.dll"
 del "$(TargetDir)*.pdb"
+del "$(TargetDir)*.xml"
 del "$(TargetDir)System.Windows.Interactivity.xml"</PostBuildEvent>
   </PropertyGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
