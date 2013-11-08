@@ -85,7 +85,7 @@ namespace OCRLessonReport.Imaging
             {
                 HorizontalLines = true,
                 VerticalLines = false,
-                HorizontalDeviation = 2
+                HorizontalDeviation = 0
             };
 
             lineTransform.ProcessImage(tmpImage, settings);
@@ -106,31 +106,17 @@ namespace OCRLessonReport.Imaging
 
             int headerLineY0 = groupedCoordinates[Settings.HeaderStartLine];
             int headerLineY1 = groupedCoordinates[Settings.HeaderStartLine + 1];
+            int headerHeight = headerLineY1 - headerLineY0;
+            int headerOffset = (int)((double)headerHeight * Settings.HeaderYOffset);
             //Copy header to new image
-            var headerImage = tmpImage.Copy(new Rectangle(0, headerLineY0, tmpImage.Width, headerLineY1 - headerLineY0));
-            //Parse header to get header lines
-            HoughLineRequestSettings headerSettings = new HoughLineRequestSettings
-            {
-                HorizontalLines = false,
-                VerticalLines = true,
-                VerticalDeviation = 1
-            };
+            var headerImage = tmpImage.Copy(new Rectangle(0, headerLineY0 + headerOffset, tmpImage.Width, headerHeight - 2 * headerOffset));
 
-            lineTransform.ProcessImage(headerImage, headerSettings);
+            var groupedheaderLineCoordinates = GetHeaderLineCoordinates(headerImage, lineTransform);
+            var groupedheaderLineCoordinatesAlt = GetHeaderLineCoordinates(headerImage, lineTransform, true);
 
-            Func<HoughLine, int, int> getRadius = (l, w) =>
-            {
-                if (l.Theta > 90 && l.Theta < 180)
-                    return w - l.Radius;
-                else
-                    return w + l.Radius;
-            };
-
-            HoughLine[] headerLines = lineTransform.GetLinesByRelativeIntensity(Settings.VerticalSensitivity);
-            //Get header vertical lines
-            var headerLineCoordinates = headerLines.Select(line => getRadius(line, hWidth));
-            //Grouped lines
-            var groupedheaderLineCoordinates = ImagingHelper.GroupingCoordinates(headerLineCoordinates, Settings.LineGroupingDelta);
+            if (groupedheaderLineCoordinates.Count < groupedheaderLineCoordinatesAlt.Count)
+                groupedheaderLineCoordinates = groupedheaderLineCoordinatesAlt;
+      
             //Build cell map
             List<TableCell> cellMap = new List<TableCell>();
 
@@ -163,6 +149,9 @@ namespace OCRLessonReport.Imaging
                 {
                     if (columnTypesMap[i] == TableCellType.Unknown)
                         continue;
+
+
+
 
                     for (int j = Settings.HeaderStartLine + 1; j < groupedCoordinates.Count - Settings.BottomStartLine - 1; j++)
                     {
@@ -208,7 +197,7 @@ namespace OCRLessonReport.Imaging
                             bfilter.SpatialFactor = 10;
                             bfilter.ColorFactor = 60;
                             bfilter.ColorPower = 0.5;
-                            bfilter.ApplyInPlace(cellImg);                        
+                            bfilter.ApplyInPlace(cellImg);
 
                             cellImg = FilterColors(cellImg, Settings.FilteringColor, ByteColor.Black, ByteColor.White);
 
@@ -224,7 +213,7 @@ namespace OCRLessonReport.Imaging
                             var biggestBlobsImage = biggestBlob.Image.ToManagedImage();
 
 
-                            cellMap.Add(new TableCell(i, j, columnTypesMap[i], biggestBlobsImage, String.Empty, DetectColor(biggestBlobsImage, Settings.CellMaskSensitivity)));
+                            cellMap.Add(new TableCell(i, j, columnTypesMap[i], cellImg, String.Empty, DetectColor(biggestBlobsImage, Settings.CellMaskSensitivity)));
                         }
 
                         curProgress++;
@@ -281,7 +270,7 @@ namespace OCRLessonReport.Imaging
                                                yCoord[Settings.HeaderStartLine + 1] - yCoord[Settings.HeaderStartLine]));
 
                 string cellText = String.Empty;
-             
+
                 cellImg = ProcessCell(cellImg);
 
                 if (isSubjectArea)
@@ -291,14 +280,14 @@ namespace OCRLessonReport.Imaging
                 bcounter.FilterBlobs = true;
                 bcounter.MinHeight = 5;
                 bcounter.MinWidth = 5;
-                bcounter.ProcessImage(cellImg);
+                //bcounter.ProcessImage(cellImg);
 
-                //Check if header cell has something
-                if (bcounter.ObjectsCount < 1)
-                {
-                    columnTypesMap.Add(i, TableCellType.Unknown);
-                    continue;
-                }
+                ////Check if header cell has something
+                //if (bcounter.ObjectsCount < 1)
+                //{
+                //    columnTypesMap.Add(i, TableCellType.Unknown);
+                //    continue;
+                //}
                 //Try parse header text
                 using (var page = engine.Process(cellImg, PageSegMode.SingleBlock))
                 {
@@ -352,6 +341,44 @@ namespace OCRLessonReport.Imaging
             return columnTypesMap;
         }
 
+        protected List<int> GetHeaderLineCoordinates(Bitmap headerImage, OCRLessonReport.Imaging.HoughLineTransformation lineTransform, bool useFilter = false)
+        {
+            int hWidth = headerImage.Width / 2;
+            double sensitivity = Settings.VerticalSensitivity;
+
+            //Parse header to get header lines
+            HoughLineRequestSettings headerSettings = new HoughLineRequestSettings
+            {
+                HorizontalLines = false,
+                VerticalLines = true,
+                VerticalDeviation = 1
+            };
+
+            if (useFilter)
+            {
+                headerImage = headerImage.Copy(new Rectangle(0, 0, headerImage.Width, headerImage.Height));
+                Median median = new Median();
+                median.ApplyInPlace(headerImage);               
+            }
+
+            lineTransform.ProcessImage(headerImage, headerSettings);
+
+            Func<HoughLine, int, int> getRadius = (l, w) =>
+            {
+                if (l.Theta > 90 && l.Theta < 180)
+                    return w - l.Radius;
+                else
+                    return w + l.Radius;
+            };
+
+            HoughLine[] headerLines = lineTransform.GetLinesByRelativeIntensity(sensitivity);
+            //Get header vertical lines
+            var headerLineCoordinates = headerLines.Select(line => getRadius(line, hWidth));
+            //Grouped lines
+            var groupedheaderLineCoordinates = ImagingHelper.GroupingCoordinates(headerLineCoordinates, Settings.LineGroupingDelta);
+
+            return groupedheaderLineCoordinates;
+        }
 
         protected virtual Bitmap ProcessCell(Bitmap cellImg, bool check = false)
         {
@@ -812,6 +839,27 @@ namespace OCRLessonReport.Imaging
                 return (l.Radius > 0 && l.Theta <= Settings.SheetEdgeVerticalMaxAngle) ||
                     (l.Radius < 0 && (180 - l.Theta) <= Settings.SheetEdgeVerticalMaxAngle);
             };
+
+            image.UnlockBits(imageData);
+        }
+
+        protected virtual void DrawLines(List<int> coordinates, Bitmap image, bool horizontal = false)
+        {
+            var imageData = image.LockBits(new Rectangle(new System.Drawing.Point(0, 0), image.Size),
+                   ImageLockMode.ReadWrite,
+                   image.PixelFormat);
+
+            foreach (var coord in coordinates)
+            {
+                if (horizontal)
+                {
+                    Drawing.Line(imageData, new IntPoint(0, coord), new IntPoint(image.Width, coord), Color.White);
+                }
+                else
+                {
+                    Drawing.Line(imageData, new IntPoint(coord, 0), new IntPoint(coord, image.Height), Color.White);
+                }
+            }
 
             image.UnlockBits(imageData);
         }

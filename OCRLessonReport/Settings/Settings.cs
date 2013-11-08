@@ -11,7 +11,11 @@ namespace OCRLessonReport
         public double HorizontalSensitivity { get; set; }
         public double CellSensitivity { get; set; }
 
+        public double HeaderYOffset { get; set; }
+
+        [Obsolete]
         public int VerticalAngleDeviation { get; set; }
+        [Obsolete]
         public int HorizontalAngleDeviation { get; set; }
 
         public int FilteringColor { get; set; }

@@ -14,10 +14,10 @@
         MinWidth="1024">
     <Grid>
         <TabControl>
-            <!--<TabItem Header="Testing">
+            <TabItem Header="Testing" Visibility="{Binding IsDebug, Converter={cnv:BoolToVisibilityConverter}}">
                 <Image Grid.Row="0" Grid.ColumnSpan="2" Source="{Binding SourceImage}" />
-            </TabItem>-->
-            <TabItem Header="{x:Static res:Resources.Window_TabControl_Recognition}">
+            </TabItem>
+            <TabItem Header="{x:Static res:Resources.Window_TabControl_Recognition}" IsSelected="True">
                 <Grid>
                     <Grid.ColumnDefinitions>                        
                         <ColumnDefinition Width="Auto" />
@@ -63,6 +63,7 @@
                             <TextBlock Grid.Column="0" Grid.Row="2" Text="{x:Static res:Resources.Window_TextBlock_Webcam}" VerticalAlignment="Center" Margin="0,0,5,0" />
                             <StackPanel Grid.Column="1" Grid.Row="2" Orientation="Horizontal">
                                 <Button Content="{x:Static res:Resources.Window_Button_OpenCam}" Command="{Binding OpenWebCamCommand}" Height="22" Width="80" HorizontalAlignment="Left"/>
+                                <TextBlock Text="{Binding VideoResolution}" VerticalAlignment="Center" Margin="5,0,0,0" />
                             </StackPanel>                        
                         </Grid>
                     </GroupBox>

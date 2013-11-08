@@ -41,7 +41,7 @@ namespace OCRLessonReport.ViewModels
 
             //Configure tesseract engine for local path
             System.Environment.SetEnvironmentVariable("TESSDATA_PREFIX", settingsManager.Settings.TessdataPrefix);
-           
+
             InitCommands();
             InitWorker();
         }
@@ -275,6 +275,31 @@ namespace OCRLessonReport.ViewModels
             }
         }
 
+        public string VideoResolution
+        {
+            get
+            {
+                string resolution = String.Empty;
+
+                if (videoSource != null && videoSource.VideoResolution != null)
+                    resolution = String.Format("{0}x{1}", videoSource.VideoResolution.FrameSize.Width, videoSource.VideoResolution.FrameSize.Height);
+
+                return resolution;
+            }
+        }
+
+        public bool IsDebug
+        {
+            get
+            {
+                #if DEBUG
+                return true;
+                #else 
+                return false;
+                #endif
+            }
+        }
+
         #endregion
 
         #region Infrastructure
@@ -316,6 +341,9 @@ namespace OCRLessonReport.ViewModels
             {
                 var videoDevices = new FilterInfoCollection(FilterCategory.VideoInputDevice);
                 videoSource = new VideoCaptureDevice(videoDevices[0].MonikerString);
+                videoSource.VideoResolution = videoSource.VideoCapabilities.OrderBy(p => p.FrameSize.Width).LastOrDefault();
+
+                RaisePropertyChanged(() => VideoResolution);
 
                 videoSource.NewFrame += (o, e) =>
                 {
@@ -346,7 +374,7 @@ namespace OCRLessonReport.ViewModels
         private void CloseWebCam()
         {
             if (videoSource != null)
-                videoSource.SignalToStop();            
+                videoSource.SignalToStop();
 
             IsWebCamOpened = false;
             RaiseCommandsExecute();
@@ -390,11 +418,15 @@ namespace OCRLessonReport.ViewModels
                     Status = ProcessingStages.Completed;
                     Progress = 0;
                     var imageProcessor = e.Result as ImageProcessor;
+                    
+                    if (IsDebug)                    
+                        SourceImage = imageProcessor.SourceBitmapImage;
+                    
                     cells = imageProcessor.Cells;
                     RaisePropertyChanged(() => Cells);
                     RaisePropertyChanged(() => IsBusy);
                     RaiseCommandsExecute();
-                    
+
                 }
             };
         }
@@ -414,14 +446,14 @@ namespace OCRLessonReport.ViewModels
         }
 
         private void Save()
-        {          
+        {
             SaveFileDialog sfd = new SaveFileDialog();
             sfd.Filter = "Access DB file (*.mdb)|*.mdb";
 
             if (sfd.ShowDialog() == DialogResult.OK)
             {
                 Repository rep = new Repository(settingsManager);
-                
+
                 try
                 {
                     rep.CreateAndExportLegacyFile(sfd.FileName, cells);
@@ -443,8 +475,8 @@ namespace OCRLessonReport.ViewModels
         {
             if (String.IsNullOrEmpty(message))
                 message = "Unexpected error.";
-            
-            System.Windows.MessageBox.Show(String.Format("Error occured: {0}", message));
+
+            System.Windows.MessageBox.Show(String.Format("Error occured: {0}", message), "Error", MessageBoxButton.OK, MessageBoxImage.Error);
         }
 
         private void RaiseCommandsExecute()
@@ -495,7 +527,7 @@ namespace OCRLessonReport.ViewModels
 
     public enum ProcessingStages
     {
-        Ready,       
+        Ready,
         Processing,
         Completed,
         Error

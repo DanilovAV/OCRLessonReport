@@ -131,10 +131,12 @@ namespace OCRLessonReport
         {
             Settings settings = new Settings();
 
-            settings.VerticalSensitivity = 0.93;
+            settings.VerticalSensitivity = 0.98;
             settings.HorizontalSensitivity = 0.5;
             settings.CellSensitivity = 0.85;
-
+            
+            settings.HeaderYOffset = 0.15;
+                        
             settings.VerticalAngleDeviation = 5;
             settings.HorizontalAngleDeviation = 0;
 
@@ -150,7 +152,7 @@ namespace OCRLessonReport
             settings.TopEdgeOffset = 0.03;
             settings.BottomEdgeOffset = 0.03;
 
-            settings.LineGroupingDelta = 7;
+            settings.LineGroupingDelta = 15;
 
             settings.HeaderStartLine = 1;
             settings.BottomStartLine = 2;
