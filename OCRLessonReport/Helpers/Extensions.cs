@@ -73,5 +73,11 @@ namespace OCRLessonReport.Helpers
             Crop crop = new Crop(section);
             return crop.Apply(srcBitmap);
         }
+
+        public static Bitmap Copy(this Bitmap srcBitmap)
+        {         
+            Crop crop = new Crop(new Rectangle(0, 0, srcBitmap.Width, srcBitmap.Height));
+            return crop.Apply(srcBitmap);
+        }
     }
 }

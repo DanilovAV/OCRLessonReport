@@ -164,6 +164,7 @@ namespace OCRLessonReport
             settings.CellYEdgeWith = 0.1;
             settings.CellEdgeCutting = 3;
             settings.CellMaskSensitivity = 140;
+            settings.CellColorFilter = 200;
 
             //Sheet edge detection sensitivity
             settings.SheetEdgeSensitivity = 0.75;

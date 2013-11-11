@@ -37,7 +37,7 @@ namespace OCRLessonReport.Imaging
 
         public override string ToString()
         {
-            return String.Format("C={0}, R={1}, Value={2}", Column, Row, (Type == TableCellType.Mark) ? Mark.ToString() : Text);
+            return String.Format("C={0}, R={1}, Value={2}, Type={3}", Column, Row, (Type == TableCellType.Mark) ? Mark.ToString() : Text, Type);
         }
       
     }

@@ -111,12 +111,19 @@ namespace OCRLessonReport.Imaging
             //Copy header to new image
             var headerImage = tmpImage.Copy(new Rectangle(0, headerLineY0 + headerOffset, tmpImage.Width, headerHeight - 2 * headerOffset));
 
-            var groupedheaderLineCoordinates = GetHeaderLineCoordinates(headerImage, lineTransform);
-            var groupedheaderLineCoordinatesAlt = GetHeaderLineCoordinates(headerImage, lineTransform, true);
+            HoughLineRequestSettings headerSettings = new HoughLineRequestSettings
+            {
+                HorizontalLines = false,
+                VerticalLines = true,
+                VerticalDeviation = 1
+            };
+
+            var groupedheaderLineCoordinates = GetLineCoordinates(headerImage, headerSettings, Settings.VerticalSensitivity, Settings.LineGroupingDelta);
+            var groupedheaderLineCoordinatesAlt = GetLineCoordinates(headerImage, headerSettings, Settings.VerticalSensitivity, Settings.LineGroupingDelta, true);
 
             if (groupedheaderLineCoordinates.Count < groupedheaderLineCoordinatesAlt.Count)
                 groupedheaderLineCoordinates = groupedheaderLineCoordinatesAlt;
-      
+
             //Build cell map
             List<TableCell> cellMap = new List<TableCell>();
 
@@ -144,24 +151,44 @@ namespace OCRLessonReport.Imaging
 
                 Dictionary<int, TableCellType> columnTypesMap = ParseColumns(tmpImage, groupedheaderLineCoordinates, groupedCoordinates, cellMap, engine);
 
+                List<int> cachedCoordinates = new List<int>();
+
                 //Parse table
                 for (int i = 0; i < groupedheaderLineCoordinates.Count - 1; i++)
                 {
                     if (columnTypesMap[i] == TableCellType.Unknown)
                         continue;
 
-
-
-
-                    for (int j = Settings.HeaderStartLine + 1; j < groupedCoordinates.Count - Settings.BottomStartLine - 1; j++)
-                    {
-                        var cellImg = tmpImage.Copy(new Rectangle(groupedheaderLineCoordinates[i], groupedCoordinates[j],
+                    //Get row image
+                    var rowImg = tmpImage.Copy(new Rectangle(groupedheaderLineCoordinates[i], groupedCoordinates[Settings.HeaderStartLine + 1],
                                              groupedheaderLineCoordinates[i + 1] - groupedheaderLineCoordinates[i],
-                                             groupedCoordinates[j + 1] - groupedCoordinates[j]));
+                                             groupedCoordinates.LastOrDefault() - groupedCoordinates[Settings.HeaderStartLine + 1]));
+
+                    HoughLineRequestSettings lineSettings = new HoughLineRequestSettings
+                    {
+                        HorizontalLines = true,
+                        VerticalLines = false,
+                    };
+
+                    DrawLines(new List<int>(Enumerable.Range(0, 4)), rowImg, true);
+
+                    List<int> groupedLineCoordinates;
+
+                    var tmpRowImage = rowImg.Copy();
+
+                    tmpRowImage = FilterColors(tmpRowImage, Settings.CellColorFilter, ByteColor.Black, ByteColor.White);
+                    groupedLineCoordinates = GetLineCoordinates(tmpRowImage, lineSettings, Settings.HorizontalSensitivity, Settings.LineGroupingDelta);
+
+                    groupedLineCoordinates = UpdateCoordinates(groupedLineCoordinates, cachedCoordinates);            
+
+                    cachedCoordinates = groupedLineCoordinates;
+
+                    for (int j = 0; j < groupedLineCoordinates.Count - Settings.BottomStartLine; j++)
+                    {
+                        var cellImg = rowImg.Copy(new Rectangle(0, groupedLineCoordinates[j], rowImg.Width,
+                                                        groupedLineCoordinates[j + 1] - groupedLineCoordinates[j]));
 
                         cellImg = ProcessCell(cellImg, i == Settings.NameStartLine);
-
-
 
                         if (columnTypesMap[i] == TableCellType.Text)
                         {
@@ -185,7 +212,7 @@ namespace OCRLessonReport.Imaging
                                 }
                             }
 
-                            cellMap.Add(new TableCell(i, j, columnTypesMap[i], cellImg, cellText, false));
+                            cellMap.Add(new TableCell(i, j + Settings.HeaderStartLine + 1, columnTypesMap[i], cellImg, cellText, false));
                         }
                         else if (columnTypesMap[i] == TableCellType.Mark)
                         {
@@ -212,8 +239,7 @@ namespace OCRLessonReport.Imaging
                             var biggestBlob = blobs.OrderBy(b => b.Area).LastOrDefault();
                             var biggestBlobsImage = biggestBlob.Image.ToManagedImage();
 
-
-                            cellMap.Add(new TableCell(i, j, columnTypesMap[i], cellImg, String.Empty, DetectColor(biggestBlobsImage, Settings.CellMaskSensitivity)));
+                            cellMap.Add(new TableCell(i, j + Settings.HeaderStartLine + 1, columnTypesMap[i], cellImg, String.Empty, DetectColor(biggestBlobsImage, Settings.CellMaskSensitivity)));
                         }
 
                         curProgress++;
@@ -256,6 +282,36 @@ namespace OCRLessonReport.Imaging
         #endregion
 
         #region Infrastructure
+
+        protected virtual List<int> UpdateCoordinates(List<int> coordinates, List<int> cachedCoordinates)
+        {
+            if (cachedCoordinates.Count < 1)
+                return coordinates;
+
+            List<int> removing = new List<int>();
+
+            for (int i = 0; i < coordinates.Count; i++)
+            {
+                if (cachedCoordinates.Where(c => Math.Abs(c - coordinates[i]) < 10).Count() > 0)
+                    continue;
+
+                removing.Add(coordinates[i]);
+            }
+
+            coordinates = coordinates.Where(c => !removing.Contains(c)).ToList();
+
+            int j = 0;
+
+            for (int i = 0; i < cachedCoordinates.Count; i++)
+            {
+                if ((j >= coordinates.Count) || Math.Abs(coordinates[j] - cachedCoordinates[i]) > 10)
+                    coordinates.Add(cachedCoordinates[i]);
+                else
+                    j++;
+            }
+
+            return coordinates.OrderBy(c => c).ToList();
+        }
 
         protected virtual Dictionary<int, TableCellType> ParseColumns(Bitmap image, List<int> xCoord, List<int> yCoord, List<TableCell> cellMap, TesseractEngine engine)
         {
@@ -329,7 +385,7 @@ namespace OCRLessonReport.Imaging
 
                     int num;
 
-                    if (Int32.TryParse(tmpCellText.Trim(), out num))
+                    if (Int32.TryParse(tmpCellText.Trim(), out num) && num != 0)
                         columnTypesMap.Add(i, TableCellType.Text);
                     else
                         columnTypesMap.Add(i, TableCellType.Mark);
@@ -341,43 +397,44 @@ namespace OCRLessonReport.Imaging
             return columnTypesMap;
         }
 
-        protected List<int> GetHeaderLineCoordinates(Bitmap headerImage, OCRLessonReport.Imaging.HoughLineTransformation lineTransform, bool useFilter = false)
+        protected List<int> GetLineCoordinates(Bitmap headerImage, HoughLineRequestSettings lineSettings, double sensitivity, int delta, bool useFilter = false)
         {
-            int hWidth = headerImage.Width / 2;
-            double sensitivity = Settings.VerticalSensitivity;
+            OCRLessonReport.Imaging.HoughLineTransformation lineTransform = new HoughLineTransformation();
 
-            //Parse header to get header lines
-            HoughLineRequestSettings headerSettings = new HoughLineRequestSettings
-            {
-                HorizontalLines = false,
-                VerticalLines = true,
-                VerticalDeviation = 1
-            };
+            int width = 0;
+
+            if (lineSettings.HorizontalLines)
+                width = headerImage.Height / 2;
+            else if (lineSettings.VerticalLines)
+                width = headerImage.Width / 2;
+
+            if (width == 0)
+                throw new Exception("Wrong image or settings, must be setted vertical or horizontal setting");
 
             if (useFilter)
             {
                 headerImage = headerImage.Copy(new Rectangle(0, 0, headerImage.Width, headerImage.Height));
                 Median median = new Median();
-                median.ApplyInPlace(headerImage);               
+                median.ApplyInPlace(headerImage);
             }
 
-            lineTransform.ProcessImage(headerImage, headerSettings);
+            lineTransform.ProcessImage(headerImage, lineSettings);
 
             Func<HoughLine, int, int> getRadius = (l, w) =>
             {
-                if (l.Theta > 90 && l.Theta < 180)
+                if (l.Theta >= 90 && l.Theta < 180)
                     return w - l.Radius;
                 else
                     return w + l.Radius;
             };
 
-            HoughLine[] headerLines = lineTransform.GetLinesByRelativeIntensity(sensitivity);
+            HoughLine[] lines = lineTransform.GetLinesByRelativeIntensity(sensitivity);
             //Get header vertical lines
-            var headerLineCoordinates = headerLines.Select(line => getRadius(line, hWidth));
+            var lineCoordinates = lines.Select(line => getRadius(line, width));
             //Grouped lines
-            var groupedheaderLineCoordinates = ImagingHelper.GroupingCoordinates(headerLineCoordinates, Settings.LineGroupingDelta);
+            var groupedLineCoordinates = ImagingHelper.GroupingCoordinates(lineCoordinates, delta);
 
-            return groupedheaderLineCoordinates;
+            return groupedLineCoordinates;
         }
 
         protected virtual Bitmap ProcessCell(Bitmap cellImg, bool check = false)

@@ -43,6 +43,7 @@ namespace OCRLessonReport
 
         public int CellEdgeCutting { get; set; }
         public int CellMaskSensitivity { get; set; }
+        public int CellColorFilter { get; set; }
 
         //Increasing brightness
         public int Brightness { get; set; }
