@@ -150,7 +150,7 @@ namespace OCRLessonReport.Models
                     cmd.Parameters.AddWithValue("@name", rows[row].Cells[2].Text.Trim());
 
                     foreach (var cell in rows[row].Cells.Where(c => c.Type == TableCellType.Mark))
-                        cmd.Parameters.AddWithValue(lessonsColumnsGrouped[cell.Column].Item2, rows[row].Cells[3].Mark.ToString());
+                        cmd.Parameters.AddWithValue(lessonsColumnsGrouped[cell.Column].Item2, cell.Mark.ToString());
                  
                     cmd.ExecuteNonQuery();
                     cmd.Parameters.Clear();

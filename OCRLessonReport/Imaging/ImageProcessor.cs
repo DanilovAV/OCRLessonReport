@@ -151,16 +151,55 @@ namespace OCRLessonReport.Imaging
 
                 Dictionary<int, TableCellType> columnTypesMap = ParseColumns(tmpImage, groupedheaderLineCoordinates, groupedCoordinates, cellMap, engine);
 
-                List<int> cachedCoordinates = new List<int>();
+                List<int> cachedCoordinates = groupedheaderLineCoordinates;
+
+                Dictionary<int, List<int>> columnsMap = new Dictionary<int, List<int>>();
+                Dictionary<int, List<int>> rowsMap = new Dictionary<int, List<int>>();
+
+                //Get column map
+                for (int i = Settings.HeaderStartLine + 1; i < groupedCoordinates.Count - Settings.BottomStartLine; i++)
+                {
+                    //Get row image
+                    var rowImg = tmpImage.Copy(new Rectangle(0, groupedCoordinates[i], tmpImage.Width,
+                                             groupedCoordinates[i + 1] - groupedCoordinates[i]));
+
+                    HoughLineRequestSettings lineSettings = new HoughLineRequestSettings
+                    {
+                        HorizontalLines = false,
+                        VerticalLines = true,
+                    };
+
+                    List<int> groupedLineCoordinates;
+
+                    var tmpRowImage = rowImg.Copy();
+
+                    tmpRowImage = FilterColors(tmpRowImage, Settings.CellColorFilter, ByteColor.Black, ByteColor.White);
+                    groupedLineCoordinates = GetLineCoordinates(tmpRowImage, lineSettings, Settings.VerticalSensitivity, Settings.LineGroupingDelta);
+
+                    groupedLineCoordinates = UpdateCoordinates(groupedLineCoordinates, cachedCoordinates);
+
+                    cachedCoordinates = groupedLineCoordinates;
+
+                    columnsMap.Add(i - Settings.HeaderStartLine - 1, groupedLineCoordinates);
+                }
+
+                //DrawLines(columnsMap[0].Select(x => x).ToList(), tmpImage);
+
+                //sourceBitmap = tmpImage;
+
+                //return;
+
+
+                cachedCoordinates.Clear();
 
                 //Parse table
                 for (int i = 0; i < groupedheaderLineCoordinates.Count - 1; i++)
-                {
+                {                    
                     if (columnTypesMap[i] == TableCellType.Unknown)
                         continue;
 
                     //Get row image
-                    var rowImg = tmpImage.Copy(new Rectangle(groupedheaderLineCoordinates[i], groupedCoordinates[Settings.HeaderStartLine + 1],
+                    var colImg = tmpImage.Copy(new Rectangle(groupedheaderLineCoordinates[i], groupedCoordinates[Settings.HeaderStartLine + 1],
                                              groupedheaderLineCoordinates[i + 1] - groupedheaderLineCoordinates[i],
                                              groupedCoordinates.LastOrDefault() - groupedCoordinates[Settings.HeaderStartLine + 1]));
 
@@ -170,23 +209,29 @@ namespace OCRLessonReport.Imaging
                         VerticalLines = false,
                     };
 
-                    DrawLines(new List<int>(Enumerable.Range(0, 4)), rowImg, true);
+                    DrawLines(new List<int>(Enumerable.Range(0, 4)), colImg, true);
 
                     List<int> groupedLineCoordinates;
 
-                    var tmpRowImage = rowImg.Copy();
+                    var tmpRowImage = colImg.Copy();
 
                     tmpRowImage = FilterColors(tmpRowImage, Settings.CellColorFilter, ByteColor.Black, ByteColor.White);
                     groupedLineCoordinates = GetLineCoordinates(tmpRowImage, lineSettings, Settings.HorizontalSensitivity, Settings.LineGroupingDelta);
 
-                    groupedLineCoordinates = UpdateCoordinates(groupedLineCoordinates, cachedCoordinates);            
+                    groupedLineCoordinates = UpdateCoordinates(groupedLineCoordinates, cachedCoordinates);
 
                     cachedCoordinates = groupedLineCoordinates;
 
+
+                    #region cell parsing
+
                     for (int j = 0; j < groupedLineCoordinates.Count - Settings.BottomStartLine; j++)
-                    {
-                        var cellImg = rowImg.Copy(new Rectangle(0, groupedLineCoordinates[j], rowImg.Width,
-                                                        groupedLineCoordinates[j + 1] - groupedLineCoordinates[j]));
+                    {                    
+                        if (columnsMap[j].Count <= i)
+                            continue;
+
+                        var cellImg = tmpImage.Copy(new Rectangle(columnsMap[j][i], groupedLineCoordinates[j] + groupedCoordinates[Settings.HeaderStartLine + 1], columnsMap[j][i + 1] - columnsMap[j][i],
+                                                        groupedLineCoordinates[j + 1] - groupedLineCoordinates[j]));                   
 
                         cellImg = ProcessCell(cellImg, i == Settings.NameStartLine);
 
@@ -216,15 +261,15 @@ namespace OCRLessonReport.Imaging
                         }
                         else if (columnTypesMap[i] == TableCellType.Mark)
                         {
-                            Median median = new Median();
-                            median.ApplyInPlace(cellImg);
-
                             BilateralSmoothing bfilter = new BilateralSmoothing();
                             bfilter.KernelSize = 7;
                             bfilter.SpatialFactor = 10;
                             bfilter.ColorFactor = 60;
                             bfilter.ColorPower = 0.5;
                             bfilter.ApplyInPlace(cellImg);
+
+                            Median median = new Median();
+                            median.ApplyInPlace(cellImg);
 
                             cellImg = FilterColors(cellImg, Settings.FilteringColor, ByteColor.Black, ByteColor.White);
 
@@ -239,7 +284,7 @@ namespace OCRLessonReport.Imaging
                             var biggestBlob = blobs.OrderBy(b => b.Area).LastOrDefault();
                             var biggestBlobsImage = biggestBlob.Image.ToManagedImage();
 
-                            cellMap.Add(new TableCell(i, j + Settings.HeaderStartLine + 1, columnTypesMap[i], cellImg, String.Empty, DetectColor(biggestBlobsImage, Settings.CellMaskSensitivity)));
+                            cellMap.Add(new TableCell(i, j + Settings.HeaderStartLine + 1, columnTypesMap[i], biggestBlobsImage, String.Empty, DetectMark(biggestBlobsImage, Settings.CellMaskSensitivity, Settings.CellMarkDetectRadius)));
                         }
 
                         curProgress++;
@@ -247,6 +292,8 @@ namespace OCRLessonReport.Imaging
 
                         UpdateProgress((int)reportProgress);
                     }
+
+                    #endregion
                 }
             }
 
@@ -749,40 +796,72 @@ namespace OCRLessonReport.Imaging
             return image;
         }
 
-        protected virtual bool DetectColor(Bitmap image, int color)
+        protected virtual bool DetectMark(Bitmap image, int color, double detectRadius)
         {
-            var width = image.Width;
-            var height = image.Height;
+            int width = image.Width;
+            int height = image.Height;
+
+            int minSize = (new[] { width, height }).Min();
+
+            int r = (int)(minSize * detectRadius);
+
+            HashSet<IntPoint> points = new HashSet<IntPoint>();
+
+            for (int theta = 0; theta < 360; theta++)
+            {
+                for (int i = 0; i <= r; i++)
+                {
+                    double x = i * Math.Cos(theta);
+                    double y = -i * Math.Sin(theta);
+
+                    var point = new IntPoint((int)x, (int)y);
+
+                    if (!points.Contains(point))
+                        points.Add(point);
+                }
+            }
 
             var imageData = image.LockBits(new Rectangle(new System.Drawing.Point(0, 0), image.Size),
                           ImageLockMode.ReadWrite,
                           image.PixelFormat);
 
-            byte[] imageBits = new byte[imageData.Stride * height];
-
             var imageStride = imageData.Stride;
 
-            int? sum = 0;
+            byte[] imageBits = new byte[imageStride * height];
 
             try
             {
                 Marshal.Copy(imageData.Scan0, imageBits, 0, imageBits.Length);
-
-                sum = imageBits.Sum(p => p);
-
-                Marshal.Copy(imageBits, 0, imageData.Scan0, imageBits.Length);
             }
             finally
             {
                 image.UnlockBits(imageData);
             }
 
-            int avg = 0;
+            for (int y = r; y < height - r; y++)
+            {
+                for (int x = r; x < width - r; x++)
+                {
+                    int sum = 0;
 
-            if (sum.HasValue)
-                avg = (int)(sum.Value / imageBits.Length);
+                    foreach (var point in points)
+                    {
+                        int pX = point.X + x;
+                        int pY = point.Y + y;
 
-            return avg > color;
+                        int pixel = pX + pY * imageStride;
+
+                        sum += imageBits[pixel];
+                    }
+
+                    int avg = (int)(sum / points.Count);
+
+                    if (avg > color)
+                        return true;
+                }
+            }
+
+            return false;
         }
 
         protected virtual double DetectRotation(Bitmap image)

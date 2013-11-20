@@ -11,12 +11,7 @@ namespace OCRLessonReport
         public double HorizontalSensitivity { get; set; }
         public double CellSensitivity { get; set; }
 
-        public double HeaderYOffset { get; set; }
-
-        [Obsolete]
-        public int VerticalAngleDeviation { get; set; }
-        [Obsolete]
-        public int HorizontalAngleDeviation { get; set; }
+        public double HeaderYOffset { get; set; }      
 
         public int FilteringColor { get; set; }
 
@@ -44,6 +39,7 @@ namespace OCRLessonReport
         public int CellEdgeCutting { get; set; }
         public int CellMaskSensitivity { get; set; }
         public int CellColorFilter { get; set; }
+        public double CellMarkDetectRadius { get; set; }
 
         //Increasing brightness
         public int Brightness { get; set; }

@@ -135,10 +135,7 @@ namespace OCRLessonReport
             settings.HorizontalSensitivity = 0.5;
             settings.CellSensitivity = 0.85;
             
-            settings.HeaderYOffset = 0.15;
-                        
-            settings.VerticalAngleDeviation = 5;
-            settings.HorizontalAngleDeviation = 0;
+            settings.HeaderYOffset = 0.15;                                
 
             settings.FilteringColor = 130;
 
@@ -163,8 +160,9 @@ namespace OCRLessonReport
             settings.CellXEdgeWith = 0.25;
             settings.CellYEdgeWith = 0.1;
             settings.CellEdgeCutting = 3;
-            settings.CellMaskSensitivity = 140;
+            settings.CellMaskSensitivity = 220;
             settings.CellColorFilter = 200;
+            settings.CellMarkDetectRadius = 0.3;
 
             //Sheet edge detection sensitivity
             settings.SheetEdgeSensitivity = 0.75;
